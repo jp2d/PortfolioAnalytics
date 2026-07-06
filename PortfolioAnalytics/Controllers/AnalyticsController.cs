@@ -11,11 +11,16 @@ namespace PortfolioAnalytics.Controllers
     {
         private readonly DataContext _context;
         private readonly IPerformanceCalculator _performanceCalculator;
+        private readonly IRiskAnalyzer _riskAnalyzer;
+        private readonly IMarketDataProvider _marketDataProvider;
 
-        public AnalyticsController(DataContext context, IPerformanceCalculator performanceCalculator)
+        public AnalyticsController(DataContext context, IPerformanceCalculator performanceCalculator,
+                                   IRiskAnalyzer riskAnalyzer, IMarketDataProvider marketDataProvider)
         {
             _context = context;
             _performanceCalculator = performanceCalculator;
+            _riskAnalyzer = riskAnalyzer;
+            _marketDataProvider = marketDataProvider;
         }
 
         [HttpGet("{id}/performance")]
@@ -38,6 +43,32 @@ namespace PortfolioAnalytics.Controllers
                 metrics.Positions.Select(p => new PositionPerformanceDto(
                     p.Symbol, p.InvestedAmount, p.CurrentValue, p.ReturnPercent, p.WeightPercent
                 )).ToList()
+            );
+
+            return Ok(dto);
+        }
+
+        [HttpGet("{id}/risk-analysis")]
+        public ActionResult<RiskAnalysisResponseDto> GetRiskAnalysis(string id)
+        {
+            var portfolio = _context.Portfolios.FirstOrDefault(p => p.Id == id);
+            if (portfolio is null)
+                return NotFound(new { message = $"Portfólio '{id}' não encontrado." });
+
+            var assetsBySymbol = _context.Assets.ToDictionary(a => a.Symbol);
+            var risk = _riskAnalyzer.Analyze(portfolio, assetsBySymbol, _marketDataProvider.Current);
+
+            var dto = new RiskAnalysisResponseDto(
+                risk.OverallRisk.ToString(),
+                risk.SharpeRatio,
+                new ConcentrationRiskDto(
+                    new LargestPositionDto(risk.LargestPosition.Symbol, risk.LargestPosition.Percentage),
+                    risk.Top3ConcentrationPercent
+                ),
+                risk.SectorDiversification.Select(s =>
+                    new SectorDiversificationDto(s.Sector, s.Percentage, s.Risk.ToString())
+                ).ToList(),
+                risk.Recommendations
             );
 
             return Ok(dto);
