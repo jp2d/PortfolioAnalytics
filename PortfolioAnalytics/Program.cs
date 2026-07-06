@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using PortfolioAnalytics.Data;
 using PortfolioAnalytics.Service;
 using PortfolioAnalytics.Service.Interface;
-using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,11 +23,6 @@ builder.Services.AddScoped<IRiskAnalyzer, RiskAnalyzer>();
 builder.Services.AddScoped<IRebalancingOptimizer, RebalancingOptimizer>();
 
 var app = builder.Build();
-
-//var options = new JsonSerializerOptions
-//{
-//    PropertyNameCaseInsensitive = true
-//};
 
 using (var scope = app.Services.CreateScope())
 {
