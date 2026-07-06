@@ -19,6 +19,7 @@ builder.Services.AddDbContext<DataContext>(options =>
 
 builder.Services.AddSingleton<IClock, SeedReferenceClock>();
 builder.Services.AddSingleton<IMarketDataProvider, MarketDataProvider>();
+builder.Services.AddScoped<IPerformanceCalculator, PerformanceCalculator>();
 
 var app = builder.Build();
 
