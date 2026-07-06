@@ -21,6 +21,7 @@ builder.Services.AddSingleton<IClock, SeedReferenceClock>();
 builder.Services.AddSingleton<IMarketDataProvider, MarketDataProvider>();
 builder.Services.AddScoped<IPerformanceCalculator, PerformanceCalculator>();
 builder.Services.AddScoped<IRiskAnalyzer, RiskAnalyzer>();
+builder.Services.AddScoped<IRebalancingOptimizer, RebalancingOptimizer>();
 
 var app = builder.Build();
 
