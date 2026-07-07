@@ -12,9 +12,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-//builder.Services.AddDbContext<DataContext>(options =>
-//    options.UseInMemoryDatabase("PortfolioAnalyticsDb"));
-
 var dbName = builder.Configuration["InMemoryDbName"] ?? "PortfolioAnalyticsDb";
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseInMemoryDatabase(dbName));
