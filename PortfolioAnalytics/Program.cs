@@ -12,8 +12,12 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+//builder.Services.AddDbContext<DataContext>(options =>
+//    options.UseInMemoryDatabase("PortfolioAnalyticsDb"));
+
+var dbName = builder.Configuration["InMemoryDbName"] ?? "PortfolioAnalyticsDb";
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseInMemoryDatabase("PortfolioAnalyticsDb"));
+    options.UseInMemoryDatabase(dbName));
 
 
 builder.Services.AddSingleton<IClock, SeedReferenceClock>();
@@ -47,3 +51,5 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }
