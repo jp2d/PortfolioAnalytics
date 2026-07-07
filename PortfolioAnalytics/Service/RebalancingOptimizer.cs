@@ -78,17 +78,19 @@ namespace PortfolioAnalytics.Service
 
                 // Delta financeiro necessário para atingir o alvo (negativo = precisa vender)
                 var delta = (item.TargetWeight - item.CurrentWeight) / 100m * totalValue;
-                var quantity = (int)Math.Floor(Math.Abs(delta) / asset.CurrentPrice);
-                if (quantity <= 0) continue;
+                var rawQuantity = Math.Abs(delta) / asset.CurrentPrice;
 
-                var estimatedValue = quantity * asset.CurrentPrice;
-                if (estimatedValue < AnalyticsRules.MinTradeValue)
+                var bestQuantity = ChooseOptimalQuantity(rawQuantity, item, asset.CurrentPrice, totalValue);
+                if (bestQuantity is null)
                 {
                     _logger.LogInformation(
-                        "Symbol {Symbol}: trade de {Value:C} abaixo do mínimo de {Min:C} — descartado.",
-                        item.Symbol, estimatedValue, AnalyticsRules.MinTradeValue);
+                        "Symbol {Symbol}: nem floor nem ceil da quantidade atingem o valor mínimo de {Min:C} — descartado.",
+                        item.Symbol, AnalyticsRules.MinTradeValue);
                     continue;
                 }
+
+                var quantity = bestQuantity.Value;
+                var estimatedValue = quantity * asset.CurrentPrice;
 
                 var action = delta < 0 ? TradeAction.Sell : TradeAction.Buy;
                 var reason = action == TradeAction.Sell
@@ -120,6 +122,55 @@ namespace PortfolioAnalytics.Service
                 : "Portfólio já alinhado ao alvo (nenhum desvio acima de 2%).";
 
             return result;
+        }
+
+        /// <summary>
+        /// Escolhe entre floor(rawQuantity) e ceil(rawQuantity) a opção que resulta no MENOR desvio
+        /// residual após o trade, respeitando o valor mínimo de R$100 e sem deixar o desvio "passar"
+        /// para o lado oposto do alvo além da tolerância de rebalanceamento (2%).
+        /// Isso corrige a sub-correção sistemática do floor puro e resgata trades que ficariam
+        /// abaixo de R$100 só por causa do arredondamento para baixo.
+        /// </summary>
+        private static int? ChooseOptimalQuantity(
+            decimal rawQuantity,
+            (string Symbol, decimal CurrentWeight, decimal TargetWeight, decimal CurrentValue) item,
+            decimal price,
+            decimal totalValue)
+        {
+            var candidates = new[] { (int)Math.Floor(rawQuantity), (int)Math.Ceiling(rawQuantity) }
+                .Distinct()
+                .Where(q => q > 0);
+
+            var isSell = item.CurrentWeight > item.TargetWeight;
+            var originalSign = Math.Sign(item.CurrentWeight - item.TargetWeight);
+
+            int? bestQuantity = null;
+            var bestResidualDeviation = decimal.MaxValue;
+
+            foreach (var candidateQty in candidates)
+            {
+                var candidateValue = candidateQty * price;
+                if (candidateValue < AnalyticsRules.MinTradeValue) continue;
+
+                var signedValue = isSell ? -candidateValue : candidateValue;
+                var newValue = item.CurrentValue + signedValue;
+                var newWeight = totalValue > 0 ? newValue / totalValue * 100m : 0m;
+                var residualDeviation = Math.Abs(newWeight - item.TargetWeight);
+                var newSign = Math.Sign(newWeight - item.TargetWeight);
+
+                // Rejeita se "passou do alvo" para o lado oposto além da tolerância de rebalanceamento
+                var overshootsBeyondTolerance =
+                    newSign != 0 && newSign != originalSign && residualDeviation > AnalyticsRules.RebalanceDeviationThreshold;
+                if (overshootsBeyondTolerance) continue;
+
+                if (residualDeviation < bestResidualDeviation)
+                {
+                    bestResidualDeviation = residualDeviation;
+                    bestQuantity = candidateQty;
+                }
+            }
+
+            return bestQuantity;
         }
 
         private string BuildExpectedImprovement(

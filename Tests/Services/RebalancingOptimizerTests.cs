@@ -115,5 +115,56 @@ namespace Tests.Services
             var aaaAllocation = result.CurrentAllocation.Single(a => a.Symbol == "AAA");
             Assert.Equal(50m, aaaAllocation.TargetWeight, precision: 2);
         }
+
+        [Fact]
+        public void Rebalancing_ArredondamentoParaCima_ReduzDesvioResidualComparadoAoFloor()
+        {
+            // total=10000, AAA: peso atual 30% (valor 3000), alvo 20% (valor 2000), delta = -1000
+            // preço 7 -> rawQuantity = 142.857 (floor=142 valor=994 -> peso 20.06%; ceil=143 valor=1001 -> peso 19.99%)
+            // ceil deixa o desvio residual menor -> deve ser escolhido
+            // ZZZ é uma posição "fantasma" só para os targets somarem 100% (evita normalização indesejada);
+            // não tem asset correspondente, então é ignorada na geração de trades.
+            var fake = new FakePerformanceCalculator
+            {
+                Result = MakePerformance(10000m, ("AAA", 30m, 3000m), ("ZZZ", 70m, 7000m))
+            };
+            var portfolio = MakePortfolio(("AAA", 0.20m), ("ZZZ", 0.80m));
+            var assetsBySymbol = new Dictionary<string, Asset>
+            {
+                ["AAA"] = new Asset { Symbol = "AAA", CurrentPrice = 7m }
+            };
+            var sut = CreateSut(fake);
+
+            var result = sut.Optimize(portfolio, assetsBySymbol);
+
+            var trade = result.SuggestedTrades.Single(t => t.Symbol == "AAA");
+            Assert.Equal(143, trade.Quantity);
+        }
+
+        [Fact]
+        public void Rebalancing_FloorAbaixoDoMinimo_UsaCeilingQuandoViavel()
+        {
+            // total=5000, BBB: peso atual 25% (valor 1250), alvo 22% (valor 1100), delta = -150
+            // preço 80 -> rawQuantity = 1.875 (floor=1 valor=80 < R$100 seria descartado antes;
+            // ceil=2 valor=160 >= R$100, viável)
+            // ZZZ é uma posição "fantasma" só para os targets somarem 100% (evita normalização indesejada).
+            var fake = new FakePerformanceCalculator
+            {
+                Result = MakePerformance(5000m, ("BBB", 25m, 1250m), ("ZZZ", 75m, 3750m))
+            };
+            var portfolio = MakePortfolio(("BBB", 0.22m), ("ZZZ", 0.78m));
+            var assetsBySymbol = new Dictionary<string, Asset>
+            {
+                ["BBB"] = new Asset { Symbol = "BBB", CurrentPrice = 80m }
+            };
+            var sut = CreateSut(fake);
+
+            var result = sut.Optimize(portfolio, assetsBySymbol);
+
+            var trade = result.SuggestedTrades.SingleOrDefault(t => t.Symbol == "BBB");
+            Assert.NotNull(trade);
+            Assert.Equal(2, trade!.Quantity);
+            Assert.Equal(160m, trade.EstimatedValue);
+        }
     }
 }
